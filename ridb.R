@@ -58,7 +58,9 @@ getSites <- function(facilityData) {
             offset=50*(j-1)
             campsitesurl<-paste0('https://ridb.recreation.gov/api/v1/facilities/',facId,'/campsites?limit=50&offset=',0,'&apikey=',key)
             tempsites<-fromJSON(campsitesurl)
-            
+            If (j==1) {
+              subInfo<-list(subSites(tempsites))
+              
             if (j==3) {return(subSites(tempsites))}
           }
     }
@@ -75,56 +77,35 @@ subSites<- function(tempsites) {
             filter(CampsiteType != "MANAGEMENT" & TypeOfUse=="Overnight")
     
     attribchk<-tempsites$RECDATA$CampsiteType !="MANAGEMENT" & tempsites$RECDATA$TypeOfUse=="Overnight" #Check each attrib list for corresponding record in sites
-
-    attrib<-data.frame(matrix(ncol=2,nrow=0))
-    colnames(attrib) <- c("AttributeName","9999")
+    attribs<-tempsites$RECDATA$ATTRIBUTES[attribchk==T]
+    eq<-tempsites$RECDATA$PERMITTEDEQUIPMENT[attribchk==T]
     
-    permiteq<-data.frame(matrix(ncol=2,nrow=0))
-    colnames(permiteq)<-c("EquipmentName","9999")
-
-  # Merge data for each campsite by attribute name since order, completeness of attributes vary
-  # Use same approach for permitted eq
-    for (i in 1:nrow(tempsites$RECDATA)) {
-      if (attribchk[i] == TRUE) {
-       temp<-as.data.frame(tempsites[1]$RECDATA$ATTRIBUTES[i])
-       names(temp)<-c('AttributeName',tempsites[1]$RECDATA$CampsiteID[i])
-       attrib<-merge(attrib,temp,by='AttributeName',all=T)
-
-       tempeq<-as.data.frame(tempsites[1]$RECDATA$PERMITTEDEQUIPMENT[i])
-       names(tempeq)<-c(names(permiteq)<-c("EquipmentName",campsites[1]$RECDATA$CampsiteID[i]))
-       permiteq<-merge(permiteq,tempeq,by="EquipmentName",all=T)
-     }
-    }
+    attribs_mrg<-Reduce(function(x,y)merge(x,y,by="AttributeName",all=TRUE),attribs)
+    names(attribs_mrg)<-c("VarName", as.character(sites$CampsiteID))
+           
+    eq_mrg<-Reduce(function(x,y)merge(x,y,by="EquipmentName",all=TRUE),eq)
+    names(eq_mrg)<-c("VarName",as.character(sites$CampsiteID))
+    
+    attrib_eq<-rbind(attribs_mrg,eq_mrg)
     
   # Transpose and rename, cleaning up attrib names to turn into colnames
-    attrib_t<-t(attrib)
-    atn<-gsub('\\s|/','',attrib_t[1,])
-    attrib_t<-as.data.frame(attrib_t[-1,])
-    CampSiteID<-row.names(attrib_t)
-    names(attrib_t)<-atn
-    siteAttribs<-as.data.frame(cbind(CampSiteID,as.data.frame(attrib_t)))
+    attribeq_t<-t(attrib_eq)
+    atn<-gsub('\\s|/','',attribeq_t[1,])
+    attribeq_t<-as.data.frame(attribeq_t[-1,])
+    CampSiteID<-row.names(attribeq_t)
+    names(attribeq_t)<-atn
+    siteAttribsEq<-as.data.frame(cbind(CampSiteID,as.data.frame(attribeq_t)))
 
-    permiteq_t<-t(permiteq)
-    eqn<-permiteq_t[1,] #No funky chars in eq names
-    permiteq_t<-as.data.frame(permiteq_t[-1,])
-    eqCampsiteID<-row.names(permiteq_t)
-    names(permiteq_t)<-eqn
-    eq<-as.data.frame(cbind(eqCampsiteID,as.data.frame(permiteq_t)))
-
-    
-  # Merge attibs and eq
-    attrib_eq<-merge(siteAttribs,eq,by.x='CampSiteID',by.y='eqCampsiteID')
-      
   # Convert factors numeric where needed
-    attrib_eq$MaxNumofPeople<-as.numeric(as.character(attrib_eq$MaxNumofPeople))
-    attrib_eq$MaxVehicleLength<-as.numeric(as.character(attrib_eq$MaxVehicleLength))
-    attrib_eq$RV<-as.numeric(as.character(attrib_eq$RV))
-    attrib_eq$Tent<-as.numeric(as.character(attrib_eq$Tent))
-    attrib_eq$Trailer<-as.numeric(as.character(attrib_eq$Trailer))
-    attrib_eq$CampSiteID<-as.character(attrib_eq$CampSiteID)
+    siteAttribsEq$MaxNumofPeople<-as.numeric(as.character(siteAttribsEq$MaxNumofPeople))
+    siteAttribsEq$MaxVehicleLength<-as.numeric(as.character(siteAttribsEq$MaxVehicleLength))
+    siteAttribsEq$RV<-as.numeric(as.character(siteAttribsEq$RV))
+    siteAttribsEq$Tent<-as.numeric(as.character(siteAttribsEq$Tent))
+    siteAttribsEq$Trailer<-as.numeric(as.character(siteAttribsEq$Trailer))
+    siteAttribsEq$CampSiteID<-as.character(siteAttribsEq$CampSiteID)
       
   # Merge sites with attrib_eq
-    sitesInfo<-merge(sites,attrib_eq,by.x='CampsiteID',by.y='CampSiteID')
+    sitesInfo<-merge(sites,siteAttribsEq,by.x='CampsiteID',by.y='CampSiteID')
   
  return(sitesInfo)  
 }
