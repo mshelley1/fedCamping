@@ -59,9 +59,9 @@ getSites <- function(facilityData) {
             campsitesurl<-paste0('https://ridb.recreation.gov/api/v1/facilities/',facId,'/campsites?limit=50&offset=',0,'&apikey=',key)
             tempsites<-fromJSON(campsitesurl)
             
-          if (j==3) { test<-subSites(tempsites)} #if for testing
-      }
-  }
+            if (j==3) {return(subSites(tempsites))}
+          }
+    }
 }
 
 #
@@ -70,31 +70,32 @@ getSites <- function(facilityData) {
 
 subSites<- function(tempsites) {
 
-  # Extract attribute values and permitted EQ for each non-MANAGEMENT campsite;
+  # Extract attribute values and permitted EQ for each non-MANAGEMENT/overnight campsite;
     sites<- select(tempsites$RECDATA,c(1:11)) %>%
             filter(CampsiteType != "MANAGEMENT" & TypeOfUse=="Overnight")
     
-    attribs<-cbind(tempsites$RECDATA$CampsiteType,tempsites[1]$RECDATA$ATTRIBUTES[1]) #initialize dataframe with first record
+    attribchk<-tempsites$RECDATA$CampsiteType !="MANAGEMENT" & tempsites$RECDATA$TypeOfUse=="Overnight" #Check each attrib list for corresponding record in sites
+
+    attrib<-data.frame(matrix(ncol=2,nrow=0))
+    colnames(attrib) <- c("AttributeName","9999")
     
-    attrib<-as.data.frame(tempsites[1]$RECDATA$ATTRIBUTES[1]) #initialize dataframe with first record
-    names(attrib)<-c('AttributeName',tempsites[1]$RECDATA$CampsiteID[1]) #colnames for each will be campsiteID
-  
-    permiteq<-as.data.frame(tempsites[1]$RECDATA$PERMITTEDEQUIPMENT[1])
-    names(permiteq)<-c('EquipmentName',tempsites[1]$RECDATA$CampsiteID[1])
-  
-    
+    permiteq<-data.frame(matrix(ncol=2,nrow=0))
+    colnames(permiteq)<-c("EquipmentName","9999")
+
   # Merge data for each campsite by attribute name since order, completeness of attributes vary
   # Use same approach for permitted eq
-    for (i in 2:nrow(tempsites$RECDATA)) {
+    for (i in 1:nrow(tempsites$RECDATA)) {
+      if (attribchk[i] == TRUE) {
        temp<-as.data.frame(tempsites[1]$RECDATA$ATTRIBUTES[i])
        names(temp)<-c('AttributeName',tempsites[1]$RECDATA$CampsiteID[i])
-       attrib<-merge(attrib,temp,by='AttributeName')
-      
+       attrib<-merge(attrib,temp,by='AttributeName',all=T)
+
        tempeq<-as.data.frame(tempsites[1]$RECDATA$PERMITTEDEQUIPMENT[i])
-       names(tempeq)<-c(names(permiteq)<-c('EquipmentName',campsites[1]$RECDATA$CampsiteID[i]))
-       permiteq<-merge(permiteq,tempeq,by='EquipmentName')
-      }
-      
+       names(tempeq)<-c(names(permiteq)<-c("EquipmentName",campsites[1]$RECDATA$CampsiteID[i]))
+       permiteq<-merge(permiteq,tempeq,by="EquipmentName",all=T)
+     }
+    }
+    
   # Transpose and rename, cleaning up attrib names to turn into colnames
     attrib_t<-t(attrib)
     atn<-gsub('\\s|/','',attrib_t[1,])
@@ -102,14 +103,15 @@ subSites<- function(tempsites) {
     CampSiteID<-row.names(attrib_t)
     names(attrib_t)<-atn
     siteAttribs<-as.data.frame(cbind(CampSiteID,as.data.frame(attrib_t)))
-      
+
     permiteq_t<-t(permiteq)
     eqn<-permiteq_t[1,] #No funky chars in eq names
     permiteq_t<-as.data.frame(permiteq_t[-1,])
     eqCampsiteID<-row.names(permiteq_t)
     names(permiteq_t)<-eqn
     eq<-as.data.frame(cbind(eqCampsiteID,as.data.frame(permiteq_t)))
-      
+
+    
   # Merge attibs and eq
     attrib_eq<-merge(siteAttribs,eq,by.x='CampSiteID',by.y='eqCampsiteID')
       
